@@ -3,7 +3,9 @@
   <SearchBar @search="search"></SearchBar>
   <div class="map-plan-container">
     <Map :geojson="geojson"></Map>
-    <PlanGrid :plans="plans"></PlanGrid>
+    <Transition name="slide-fade">
+      <PlanGrid :plans="plans" v-if="plans.length > 0"></PlanGrid>
+    </Transition>
   </div>
 
 
@@ -55,15 +57,34 @@
 
 
 async function search(address) {
-  console.log(address)
   try {
-    const response = await fetch(`http://127.0.0.1:8001/api/compute_poly/?address=${address}`);
+    plans.value = [];
+    geojson.value = {};
+    const geoResponse = await fetch(`http://127.0.0.1:8001/api/compute_poly/?address=${address}`);
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (!geoResponse.ok) {
+      throw new Error(`HTTP error! status: ${geoResponse.status}`);
     }
 
-    geojson.value = await response.json();
+    geojson.value = await geoResponse.json();
+
+
+// Step 2: Post to get fitting blueprints
+    const blueprintResponse = await fetch('http://127.0.0.1:8001/fit-blueprints', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ features: geojson.value })
+    });
+
+    if (!blueprintResponse.ok) {
+      throw new Error(`Blueprint fetch failed! status: ${blueprintResponse.status}`);
+    }
+    
+    const blueprints = await blueprintResponse.json();
+    plans.value = blueprints.houses;
+
 
   } catch (error) {
     console.error('Error fetching GeoJSON:', error);
@@ -72,7 +93,7 @@ async function search(address) {
 
 
   onMounted(() => {
-    searchPlans("a")
+    // searchPlans("a")
   })
 </script>
 
@@ -91,5 +112,31 @@ async function search(address) {
     flex: 1;
   }
 
+  /* --- Transition CSS for Slide-In --- */
+
+/* Base styles for the transition */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.8s ease-out; /* Adjust duration and easing as desired */
+}
+
+/* Entering transition state (from) */
+.slide-fade-enter-from {
+  transform: translateX(100%); /* Start off-screen to the right */
+  opacity: 0; /* Start invisible */
+}
+
+/* Leaving transition state (to) */
+.slide-fade-leave-to {
+  transform: translateX(100%); /* End off-screen to the right */
+  opacity: 0; /* End invisible */
+}
+
+/* When the component is active (visible), it will transition from enter-from to its final state */
+.slide-fade-enter-to,
+.slide-fade-leave-from {
+  transform: translateX(0); /* Final position */
+  opacity: 1; /* Final visibility */
+}
 
 </style>
